@@ -451,20 +451,17 @@ class NiconicoPlaylistIE(InfoExtractor):
     def _real_extract(self, url):
         list_id = self._match_id(url)
         webpage = self._download_webpage(url, list_id)
-
-        entries_json = self._search_regex(r'Mylist\.preload\(\d+, (\[.*\])\);',
-                                          webpage, 'entries')
-        entries = json.loads(entries_json)
+        title = webpage.split('「')[1].split('」')[0]
+        entries_json = json.loads(webpage.split('<script type="application/ld+json">')[1].split('</script>')[0])
+        entries = entries_json['itemListElement']
         entries = [{
             '_type': 'url',
-            'ie_key': NiconicoIE.ie_key(),
-            'url': ('http://www.nicovideo.jp/watch/%s' %
-                    entry['item_data']['video_id']),
+            'url': (entry['url']),
         } for entry in entries]
 
         return {
             '_type': 'playlist',
-            'title': self._search_regex(r'\s+name: "(.*?)"', webpage, 'title'),
+            'title': title,
             'id': list_id,
             'entries': entries,
         }
