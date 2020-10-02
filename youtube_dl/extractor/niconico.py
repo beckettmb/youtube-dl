@@ -437,7 +437,8 @@ class NiconicoIE(InfoExtractor):
 
 
 class NiconicoPlaylistIE(InfoExtractor):
-    _VALID_URL = r'https?://(?:www\.)?nicovideo\.jp/mylist/(?P<id>\d+)'
+    _VALID_URL = r'https?://(?:www\.)?nicovideo\.jp/(my/)?mylist/(?P<id>\d+)'
+    _NETRC_MACHINE = 'niconico'
 
     _TEST = {
         'url': 'http://www.nicovideo.jp/mylist/27411728',
@@ -448,15 +449,72 @@ class NiconicoPlaylistIE(InfoExtractor):
         'playlist_mincount': 225,
     }
 
+    def _real_initialize(self):
+        self._login()
+
+    def _login(self):
+        username, password = self._get_login_info()
+        # No authentication to be performed
+        if not username:
+            return True
+
+        # Log in
+        login_ok = True
+        login_form_strs = {
+            'mail_tel': username,
+            'password': password,
+        }
+        urlh = self._request_webpage(
+            'https://account.nicovideo.jp/api/v1/login', None,
+            note='Logging in', errnote='Unable to log in',
+            data=urlencode_postdata(login_form_strs))
+        if urlh is False:
+            login_ok = False
+        else:
+            parts = compat_urlparse.urlparse(urlh.geturl())
+            if compat_parse_qs(parts.query).get('message', [None])[0] == 'cant_login':
+                login_ok = False
+        if not login_ok:
+            self._downloader.report_warning('unable to log in: bad username or password')
+        return login_ok
+
     def _real_extract(self, url):
         list_id = self._match_id(url)
-        webpage = self._download_webpage(url, list_id)
-        title = webpage.split('「')[1].split('」')[0]
-        entries_json = json.loads(webpage.split('<script type="application/ld+json">')[1].split('</script>')[0])
-        entries = entries_json['itemListElement']
+
+        if "my/" in url:
+            list_url = "https://nvapi.nicovideo.jp/v1/users/me/mylists/" + list_id
+            webpage = self._download_webpage(list_url, list_id, headers={
+                "X-Frontend-Id": "6",
+                "X-Frontend-Version": "0",
+                "X-Niconico-Language": "en-us",
+            }, fatal=False)
+            if not webpage:
+                raise ExtractorError("Must be logged in.", expected=True)
+            list_json = json.loads(webpage)
+        else:
+            list_url = "https://nvapi.nicovideo.jp/v1/mylists/" + list_id
+            webpage = self._download_webpage(list_url, list_id, headers={
+                "X-Frontend-Id": "6",
+                "X-Frontend-Version": "0",
+                "X-Niconico-Language": "en-us",
+            }, fatal=False)
+            if not webpage:
+                mylist_url = "https://nvapi.nicovideo.jp/v1/users/me/mylists/" + list_id
+                webpage = self._download_webpage(mylist_url, list_id, headers={
+                    "X-Frontend-Id": "6",
+                    "X-Frontend-Version": "0",
+                    "X-Niconico-Language": "en-us",
+                }, fatal=False)
+                if not webpage:
+                    raise ExtractorError("Must be logged in.", expected=True)
+            list_json = json.loads(webpage)
+
+        title = list_json['data']['mylist']['name']
+        entries = list_json['data']['mylist']['items']
         entries = [{
             '_type': 'url',
-            'url': (entry['url']),
+            'url': ('https://www.nicovideo.jp/watch/%s'
+                    % entry['video']['id'])
         } for entry in entries]
 
         return {
