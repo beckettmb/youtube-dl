@@ -487,27 +487,37 @@ class NiconicoPlaylistIE(InfoExtractor):
                 "X-Frontend-Id": "6",
                 "X-Frontend-Version": "0",
                 "X-Niconico-Language": "en-us",
-            }, fatal=False)
-            if not webpage:
-                raise ExtractorError("Must be logged in.", expected=True)
+            }, fatal=False, expected_status=(401, 404))
             list_json = json.loads(webpage)
+
+            if list_json['meta']['status'] == 401:
+                raise ExtractorError("Must be logged in.", expected=True)
+            elif list_json['meta']['status'] == 404:
+                raise ExtractorError("List not found.", expected=True)
         else:
             list_url = "https://nvapi.nicovideo.jp/v1/mylists/" + list_id
             webpage = self._download_webpage(list_url, list_id, headers={
                 "X-Frontend-Id": "6",
                 "X-Frontend-Version": "0",
                 "X-Niconico-Language": "en-us",
-            }, fatal=False)
-            if not webpage:
+            }, fatal=False, expected_status=(403, 404))
+            list_json = json.loads(webpage)
+
+            if list_json['meta']['status'] == 404:
+                raise ExtractorError("List not found.", expected=True)
+            elif list_json['meta']['status'] == 403:
                 mylist_url = "https://nvapi.nicovideo.jp/v1/users/me/mylists/" + list_id
                 webpage = self._download_webpage(mylist_url, list_id, headers={
                     "X-Frontend-Id": "6",
                     "X-Frontend-Version": "0",
                     "X-Niconico-Language": "en-us",
-                }, fatal=False)
-                if not webpage:
+                }, fatal=False, expected_status=(401, 404))
+                list_json = json.loads(webpage)
+
+                if list_json['meta']['status'] == 401:
                     raise ExtractorError("Must be logged in.", expected=True)
-            list_json = json.loads(webpage)
+                elif list_json['meta']['status'] == 404:
+                    raise ExtractorError("List is private.", expected=True)
 
         title = list_json['data']['mylist']['name']
         entries = list_json['data']['mylist']['items']
